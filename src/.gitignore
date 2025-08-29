@@ -1,0 +1,14 @@
+# Compiled class files
+/build/
+/bin/
+
+# Eclipse project files
+.settings/
+.classpath
+.project
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
