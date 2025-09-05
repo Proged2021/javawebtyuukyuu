@@ -6,6 +6,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -15,6 +16,8 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+
+
 
 public class ReservationDAO {
 	private static final List<Reservation> reservations = new CopyOnWriteArrayList<>();
@@ -75,6 +78,20 @@ public class ReservationDAO {
 			saveReservations();
 		}
 	}
+	
+	//ユーザーがクリックした枠が予約可能かどうか判定
+	public boolean isSlotAvailable(LocalDateTime slot) {
+	    return reservations.stream()
+	            .noneMatch(r -> r.getReservationTime().equals(slot));
+	}
+	
+	//予約リストを取得
+	public List<Reservation> getReservationsByDate(LocalDate date) {
+	    return reservations.stream()
+	            .filter(r -> r.getReservationTime().toLocalDate().equals(date))
+	            .collect(Collectors.toList());
+	}
+
 
 	public List<Reservation> searchAndSortReservations(String searchTerm, String sortBy,
 			String sortOrder) {
