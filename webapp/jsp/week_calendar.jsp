@@ -1,143 +1,151 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
-<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
+<%@ taglib prefix="c"  uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions" %>
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>日時を選択</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>空席カレンダー</title>
   <style>
     :root{
-      --accent:#ff6f61; --accent-weak:#ffe4e0; --grid:#e6e6e6;
-      --text:#333; --muted:#888; --xbg:#f4f5f7; --sun:#d9534f; --sat:#1e88e5;
-      --today-bg:#fff7f5; /* 当日列の淡いハイライト */
+      --rose-50:#fdf2f8; --rose-100:#fde2e7; --rose-500:#f43f5e;
+      --neutral-50:#fafafa; --neutral-100:#f5f5f5; --neutral-200:#e5e7eb;
+      --neutral-600:#475569;
     }
-    *{box-sizing:border-box}
-    body{
-      font-family:system-ui,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
-      color:var(--text); margin:16px;
-    }
-    .heading{display:flex;align-items:baseline;gap:10px;margin:0 auto 8px;max-width:980px}
-    .title{font-size:17px;font-weight:700}
-    .month{font-size:13px;color:var(--muted)}
-
-    .legend{
-      display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted);
-      margin:6px auto 10px; max-width:980px;
-    }
-    .legend .pill{border:1px solid var(--grid);padding:1px 8px;border-radius:999px;min-width:24px;text-align:center}
-    .legend .ok{border-color:var(--accent);color:var(--accent);background:var(--accent-weak)}
-
-    .wrap{
-      overflow:auto; border:1px solid var(--grid); border-radius:10px;
-      box-shadow:0 2px 6px rgba(0,0,0,.04);
-      max-width:980px; margin:0 auto; background:#fff;
-    }
-
-    table{border-collapse:separate;border-spacing:0;width:100%;table-layout:fixed}
-    th,td{border-bottom:1px solid var(--grid);border-right:1px solid var(--grid);text-align:center}
-    th:first-child,td:first-child{border-left:1px solid var(--grid)}
-    thead th{position:sticky;top:0;background:#fff;z-index:2}
-    .time-col{
-      width:60px; position:sticky; left:0; background:#fff; z-index:3;
-      font-weight:600; font-size:12px; padding:4px 2px;
-    }
-
-    /* 日付ヘッダ：上=日、下=曜日。todayで淡く背景 */
-    .date-head{padding:4px 2px; min-width:58px}
-    .date-head .day{font-size:15px;font-weight:700;line-height:1}
-    .date-head .dow{font-size:10px;color:var(--muted);margin-top:2px}
-    .date-head.sunday .day,.date-head.sunday .dow{color:var(--sun)}
-    .date-head.saturday .day,.date-head.saturday .dow{color:var(--sat)}
-    .date-head.today{background:var(--today-bg)}
-
-    tbody td{height:28px;padding:0}
-    .ok a{
-      display:flex; align-items:center; justify-content:center;
-      width:100%; height:100%; text-decoration:none;
-      color:var(--accent); font-weight:700; font-size:12px;
-      transition:background .12s, transform .04s;
-      border-radius:999px; margin:2px;
-    }
-    .ok a:hover{background:var(--accent-weak)}
-    .ok a:active{transform:scale(0.98)}
-    .x{background:var(--xbg); color:var(--muted); font-size:12px}
-    .past{opacity:.45; pointer-events:none}
-    .late{opacity:.7} /* 閉店前の遅い時間帯をややトーンダウン */
-
-    /* 角丸 */
-    table thead tr th:first-child{border-top-left-radius:10px}
-    table thead tr th:last-child{border-top-right-radius:10px}
-    table tbody tr:last-child td:first-child{border-bottom-left-radius:10px}
-    table tbody tr:last-child td:last-child{border-bottom-right-radius:10px}
-
-    /* さらに小さくしたい時は body に dense クラス */
-    body.dense .wrap{max-width:860px}
-    body.dense .date-head{min-width:50px}
-    body.dense .time-col{width:54px}
-    body.dense tbody td{height:26px}
-    body.dense .ok a{margin:1px; font-size:11px}
+    html,body{margin:0;background:#fafafa;color:#111;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;}
+    .wrap{max-width:1200px;margin:0 auto;padding:16px;}
+    .head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+    .brand{color:#e11d48;font-weight:800}
+    .title{font-weight:700;font-size:20px}
+    .calendar{background:#fff;border:1px solid var(--rose-100);border-radius:14px;overflow:hidden;box-shadow:0 1px 8px #0000000d}
+    .grid{border-collapse:separate;border-spacing:0;width:100%;table-layout:fixed}
+    .grid th,.grid td{border-right:1px solid var(--neutral-200);border-bottom:1px solid var(--neutral-200)}
+    .grid th:last-child,.grid td:last-child{border-right:none}
+    .grid thead th{position:sticky;top:0;background:#fff;z-index:1}
+    .dow{font-size:12px;color:#64748b}
+    .date{font-weight:700}
+    .today{background:var(--neutral-100)}
+    .sat .date{color:#2563eb}
+    .sun .date{color:#ef4444}
+    .time-col{width:86px;background:#fff;position:sticky;left:0;z-index:2}
+    .time-col .t{font-size:12px;color:#475569}
+    .time-row{background:#fff}
+    .late{background:linear-gradient(90deg, #ffffff 0%, #f7f7f7 100%)}
+    .cell{height:44px;text-align:center;padding:4px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:10px;padding:8px 10px;cursor:pointer;font-size:13px;font-weight:700;min-width:48px}
+    .btn-ok{background:#10b981;color:#fff}
+    .btn-ok:hover{filter:brightness(0.96)}
+    .btn-ng{background:#e5e7eb;color:#94a3b8;cursor:not-allowed}
+    .legend{margin-top:8px;font-size:12px;color:#64748b;display:flex;gap:12px}
+    .badge{display:inline-block;border-radius:8px;padding:2px 8px;background:var(--rose-50);color:#9f1239;font-weight:700;font-size:12px;border:1px solid var(--rose-100)}
+    .bar{display:flex;justify-content:space-between;align-items:center;margin:10px 0 14px}
+    .note{font-size:12px;color:#64748b}
   </style>
 </head>
 <body>
-  <!-- 上段：タイトルと年月 -->
-  <div class="heading">
-    <div class="title">日時を選択</div>
-    <div class="month">${monthTitle}</div>
+<div class="wrap">
+  <div class="head">
+    <div class="brand">B*beauty</div>
+    <div class="title">空席カレンダー</div>
   </div>
 
-  <div class="legend">
-    <span class="pill ok">◎ 予約可</span>
-    <span class="pill">✗ 予約不可</span>
-    <span>※ 月曜日は定休日（全て ✗）</span>
+  <div class="bar">
+    <div>
+      <span class="badge">${monthTitle}</span>
+      <c:if test="${not empty param.title}">
+        <span class="badge">クーポン: ${param.title}</span>
+      </c:if>
+    </div>
+    <div class="note">※ 月曜は終日× / 30分刻み</div>
   </div>
 
-  <div class="wrap">
-    <table>
+  <!-- カレンダー -->
+  <div class="calendar">
+    <table class="grid">
       <thead>
-        <tr>
-          <th class="time-col">時間</th>
-          <c:forEach var="d" items="${dates}">
-            <th class="date-head
-                       ${isSunday[d] ? 'sunday' : ''} 
-                       ${isSaturday[d] ? 'saturday' : ''} 
-                       ${isToday[d] ? 'today' : ''}">
-              <!-- 上：日（2桁）、下：曜日 -->
-              <div class="day">
-                <c:choose>
-                  <c:when test="${d.dayOfMonth lt 10}">0${d.dayOfMonth}</c:when>
-                  <c:otherwise>${d.dayOfMonth}</c:otherwise>
-                </c:choose>
-              </div>
+      <tr>
+        <th class="time-col today">
+          <div style="padding:8px 6px">時間</div>
+        </th>
+
+        <!-- 日付ヘッダ -->
+        <c:forEach var="d" items="${dates}">
+          <!-- LocalDate.toString() は yyyy-MM-dd -->
+          <c:set var="dateStr" value="${d}"/>
+          <c:set var="isSun" value="${isSunday[d]}"/>
+          <c:set var="isSat" value="${isSaturday[d]}"/>
+          <c:set var="isTod" value="${isToday[d]}"/>
+          <th class="${isSun?'sun':''} ${isSat?'sat':''} ${isTod?'today':''}">
+            <div style="padding:8px 6px;text-align:center">
+              <div class="date">${fn:substring(dateStr,5,10)}</div>
               <div class="dow">${dowJa[d]}</div>
-            </th>
+            </div>
+          </th>
+        </c:forEach>
+      </tr>
+      </thead>
+
+      <tbody>
+      <!-- 各時間行 -->
+      <c:forEach var="t" items="${times}">
+        <!-- LocalTime.toString() は HH:mm:ss なので先頭5文字だけ使う -->
+        <c:set var="timeStr" value="${fn:substring(t,0,5)}"/>
+        <tr class="time-row">
+          <!-- 左端 時刻 -->
+          <td class="time-col">
+            <div class="t" style="padding:8px 6px;">${timeStr}</div>
+          </td>
+
+          <!-- 各日セル -->
+          <c:forEach var="d" items="${dates}">
+            <c:set var="dateStr" value="${d}"/>
+            <!-- 予約可否判定キー yyyy-MM-dd'T'HH:mm -->
+            <c:set var="key" value="${dateStr}T${timeStr}"/>
+
+            <c:set var="free" value="${availKeyed[key]}"/>
+            <c:set var="past" value="${isPastKeyed[key]}"/>
+            <c:set var="late" value="${isLateKeyed[key]}"/>
+
+            <td class="cell ${late ? 'late' : ''}">
+              <c:choose>
+                <c:when test="${free and not past}">
+                  <!-- ◯：フォームPOST（方法B） ※ボタン表示は「◎」 -->
+                  <form method="post" action="${pageContext.request.contextPath}/reservation" style="display:inline-block">
+                    <input type="hidden" name="action" value="select_timeslot"/>
+                    <input type="hidden" name="date"   value="${dateStr}"/>
+                    <input type="hidden" name="time"   value="${timeStr}"/>
+                    <!-- クーポン情報を引き継ぎ（あれば） -->
+                    <input type="hidden" name="title"  value="${param.title}"/>
+                    <input type="hidden" name="price"  value="${param.price}"/>
+                    <input type="hidden" name="c_time" value="${param.time}"/>
+
+                    <button type="submit" class="btn btn-ok" aria-label="この枠を予約する">◎</button>
+                  </form>
+                </c:when>
+                <c:otherwise>
+                  <!-- ×：クリック不可 -->
+                  <button type="button" class="btn btn-ng" disabled>×</button>
+                </c:otherwise>
+              </c:choose>
+            </td>
           </c:forEach>
         </tr>
-      </thead>
-      <tbody>
-        <c:forEach var="t" items="${times}">
-          <tr>
-            <td class="time-col">${t}</td>
-            <c:forEach var="d" items="${dates}">
-              <c:set var="key" value="${d}T${t}" />
-              <c:set var="available" value="${availKeyed[key]}"/>
-              <c:set var="isPast" value="${isPastKeyed[key]}"/>
-              <c:set var="isLate" value="${isLateKeyed[key]}"/>
-
-              <td class="${available ? 'ok' : 'x'} ${isPast ? 'past' : ''} ${isLate ? 'late' : ''}">
-                <c:choose>
-                  <c:when test="${available && !isPast}">
-                    <!-- menu.jsp は仮遷移（未作成なら404） -->
-                    <a href="${pageContext.request.contextPath}/menu.jsp?dateTime=${key}"
-                       aria-label="${d} ${t} を予約">◎</a>
-                  </c:when>
-                  <c:otherwise>✗</c:otherwise>
-                </c:choose>
-              </td>
-            </c:forEach>
-          </tr>
-        </c:forEach>
+      </c:forEach>
       </tbody>
     </table>
   </div>
+
+  <div class="legend">
+    <span>◎ 予約可</span>
+    <span>× 予約不可 / 過去</span>
+    <span>うすい列 = 本日</span>
+    <span>グレー背景 = 閉店前帯</span>
+  </div>
+
+  <div style="margin-top:14px">
+    <a href="${pageContext.request.contextPath}/shop-top/" style="font-size:12px;color:#2563eb;text-decoration:none;">← お店ページに戻る</a>
+  </div>
+</div>
 </body>
 </html>

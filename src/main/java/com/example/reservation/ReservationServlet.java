@@ -4,6 +4,8 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -232,6 +234,32 @@ public class ReservationServlet extends HttpServlet {
 
         req.setCharacterEncoding("UTF-8");
         String action = req.getParameter("action");
+
+        // ▼ 追加：時間枠選択 → 入力フォームへ
+        if ("select_timeslot".equals(action)) {
+            String date  = req.getParameter("date");   // 例: 2025-09-08
+            String time  = req.getParameter("time");   // 例: 15:00
+            String title = req.getParameter("title");  // クーポン名（任意）
+            String price = req.getParameter("price");  // 価格（任意）
+            String ctime = req.getParameter("c_time"); // 所要時間（任意）
+
+            // 必要ならサーバセッションに保持（JSP から EL で参照したい場合など）
+            req.getSession().setAttribute("selectedTimeslot", date + " " + time);
+            req.getSession().setAttribute("selectedCouponTitle", title);
+
+            String ctx = req.getContextPath(); // 例: /javawebtyuukyuu
+            String q = String.format(
+                "title=%s&time=%s&price=%s&date=%s&start=%s",
+                URLEncoder.encode(title == null ? "" : title, StandardCharsets.UTF_8),
+                URLEncoder.encode(ctime == null ? "" : ctime, StandardCharsets.UTF_8),
+                URLEncoder.encode(price == null ? "" : price, StandardCharsets.UTF_8),
+                URLEncoder.encode(date  == null ? "" : date,  StandardCharsets.UTF_8),
+                URLEncoder.encode(time  == null ? "" : time,  StandardCharsets.UTF_8)
+            );
+
+            resp.sendRedirect(ctx + "/jsp/input_member.jsp?" + q);
+            return;
+        }
 
         if ("add".equals(action)) {
             String name = req.getParameter("name");
