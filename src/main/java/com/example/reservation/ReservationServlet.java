@@ -95,132 +95,9 @@ public class ReservationServlet extends HttpServlet {
             return;
         }
 
-        // === 2週間カレンダー（今日〜13日後/計14日、30分刻み、月曜は全✗）
+        // 2週間カレンダー
         if ("timeslots_week".equals(action)) {
-            LocalDate startDate = LocalDate.now();
-            LocalDate endDate   = startDate.plusDays(13);
-
-            LocalTime startTime = LocalTime.of(9, 0);
-            LocalTime endTime   = LocalTime.of(21, 0);
-
-            // 閉店前帯の視覚トーンダウン開始（例：20:00以降）
-            LocalTime lateStart = LocalTime.of(20, 0);
-
-            // 縦軸の時間リスト
-            List<LocalTime> times = new ArrayList<>();
-            for (LocalTime t = startTime; !t.isAfter(endTime); t = t.plusMinutes(30)) {
-                times.add(t);
-            }
-
-            // availability: 日付 → (時間 → 可否)
-            Map<LocalDate, Map<LocalTime, Boolean>> availability = new LinkedHashMap<>();
-            for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
-                Map<LocalTime, Boolean> slots = new LinkedHashMap<>();
-                boolean isMonday = (date.getDayOfWeek() == DayOfWeek.MONDAY);
-                for (LocalTime time : times) {
-                    if (isMonday) {
-                        slots.put(time, false);
-                    } else {
-                        LocalDateTime slot = LocalDateTime.of(date, time);
-                        boolean isFree = reservationDAO.isSlotAvailable(slot);
-                        slots.put(time, isFree);
-                    }
-                }
-                availability.put(date, slots);
-            }
-
-            // JSPで扱いやすい配列/マップ
-            List<LocalDate> dates = new ArrayList<>(availability.keySet());
-
-            // 曜日ラベル (月) (火)...
-            Map<LocalDate, String> dowJa = new LinkedHashMap<>();
-            for (LocalDate d : dates) {
-                String w = switch (d.getDayOfWeek()) {
-                    case MONDAY    -> "(月)";
-                    case TUESDAY   -> "(火)";
-                    case WEDNESDAY -> "(水)";
-                    case THURSDAY  -> "(木)";
-                    case FRIDAY    -> "(金)";
-                    case SATURDAY  -> "(土)";
-                    case SUNDAY    -> "(日)";
-                };
-                dowJa.put(d, w);
-            }
-
-            // 可否表（"yyyy-MM-dd'T'HH:mm" キー）
-            DateTimeFormatter keyFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm");
-            Map<String, Boolean> availKeyed = new LinkedHashMap<>();
-            for (Map.Entry<LocalDate, Map<LocalTime, Boolean>> e : availability.entrySet()) {
-                LocalDate d = e.getKey();
-                for (Map.Entry<LocalTime, Boolean> s : e.getValue().entrySet()) {
-                    String key = d.atTime(s.getKey()).format(keyFmt);
-                    availKeyed.put(key, s.getValue());
-                }
-            }
-
-            // 土日フラグ（ヘッダ色分け）
-            Map<LocalDate, Boolean> isSunday = new LinkedHashMap<>();
-            Map<LocalDate, Boolean> isSaturday = new LinkedHashMap<>();
-            for (LocalDate d : dates) {
-                isSunday.put(d, d.getDayOfWeek() == DayOfWeek.SUNDAY);
-                isSaturday.put(d, d.getDayOfWeek() == DayOfWeek.SATURDAY);
-            }
-
-            // 当日フラグ（ヘッダ淡色ハイライト）
-            Map<LocalDate, Boolean> isToday = new LinkedHashMap<>();
-            LocalDate today = LocalDate.now();
-            for (LocalDate d : dates) {
-                isToday.put(d, d.equals(today));
-            }
-
-            // 過去枠（セルは薄く＆クリック不可）
-            Map<String, Boolean> isPastKeyed = new LinkedHashMap<>();
-            LocalDateTime now = LocalDateTime.now();
-            for (LocalDate d : dates) {
-                for (LocalTime t : times) {
-                    String key = d.atTime(t).format(keyFmt);
-                    isPastKeyed.put(key, d.atTime(t).isBefore(now));
-                }
-            }
-
-            // 閉店前帯（例：20:00以降をややトーンダウン）
-            Map<String, Boolean> isLateKeyed = new LinkedHashMap<>();
-            for (LocalDate d : dates) {
-                for (LocalTime t : times) {
-                    String key = d.atTime(t).format(keyFmt);
-                    isLateKeyed.put(key, !t.isBefore(lateStart)); // 20:00以降 = true
-                }
-            }
-
-            // 年月タイトル（同一月or跨ぎ対応）
-            String monthTitle;
-            if (startDate.getYear() == endDate.getYear() && startDate.getMonth() == endDate.getMonth()) {
-                monthTitle = String.format("%d年%d月", startDate.getYear(), startDate.getMonthValue());
-            } else if (startDate.getYear() == endDate.getYear()) {
-                monthTitle = String.format("%d年%d月〜%d月",
-                        startDate.getYear(), startDate.getMonthValue(), endDate.getMonthValue());
-            } else {
-                monthTitle = String.format("%d年%d月〜%d年%d月",
-                        startDate.getYear(), startDate.getMonthValue(),
-                        endDate.getYear(), endDate.getMonthValue());
-            }
-
-            // JSPへ渡す
-            req.setAttribute("startDate", startDate);
-            req.setAttribute("endDate", endDate);
-            req.setAttribute("times", times);
-            req.setAttribute("dates", dates);
-            req.setAttribute("dowJa", dowJa);
-            req.setAttribute("availKeyed", availKeyed);
-            req.setAttribute("isSunday", isSunday);
-            req.setAttribute("isSaturday", isSaturday);
-            req.setAttribute("isToday", isToday);
-            req.setAttribute("isPastKeyed", isPastKeyed);
-            req.setAttribute("isLateKeyed", isLateKeyed);
-            req.setAttribute("monthTitle", monthTitle);
-
-            RequestDispatcher rd = req.getRequestDispatcher("/jsp/week_calendar.jsp");
-            rd.forward(req, resp);
+            buildWeekCalendar(req, resp);
             return;
         }
 
@@ -234,32 +111,6 @@ public class ReservationServlet extends HttpServlet {
 
         req.setCharacterEncoding("UTF-8");
         String action = req.getParameter("action");
-
-        // ▼ 追加：時間枠選択 → 入力フォームへ
-        if ("select_timeslot".equals(action)) {
-            String date  = req.getParameter("date");   // 例: 2025-09-08
-            String time  = req.getParameter("time");   // 例: 15:00
-            String title = req.getParameter("title");  // クーポン名（任意）
-            String price = req.getParameter("price");  // 価格（任意）
-            String ctime = req.getParameter("c_time"); // 所要時間（任意）
-
-            // 必要ならサーバセッションに保持（JSP から EL で参照したい場合など）
-            req.getSession().setAttribute("selectedTimeslot", date + " " + time);
-            req.getSession().setAttribute("selectedCouponTitle", title);
-
-            String ctx = req.getContextPath(); // 例: /javawebtyuukyuu
-            String q = String.format(
-                "title=%s&time=%s&price=%s&date=%s&start=%s",
-                URLEncoder.encode(title == null ? "" : title, StandardCharsets.UTF_8),
-                URLEncoder.encode(ctime == null ? "" : ctime, StandardCharsets.UTF_8),
-                URLEncoder.encode(price == null ? "" : price, StandardCharsets.UTF_8),
-                URLEncoder.encode(date  == null ? "" : date,  StandardCharsets.UTF_8),
-                URLEncoder.encode(time  == null ? "" : time,  StandardCharsets.UTF_8)
-            );
-
-            resp.sendRedirect(ctx + "/jsp/input_member.jsp?" + q);
-            return;
-        }
 
         if ("add".equals(action)) {
             String name = req.getParameter("name");
@@ -360,7 +211,194 @@ public class ReservationServlet extends HttpServlet {
             return;
         }
 
+        // カレンダー「◎」→ 入力ページ
+        if ("select_timeslot".equals(action)) {
+            String date  = req.getParameter("date");
+            String time  = req.getParameter("time");
+            String title = req.getParameter("title");
+            String price = req.getParameter("price");
+            String ctime = req.getParameter("c_time");
+
+            String ctx = req.getContextPath();
+            String q = "?"
+                + (date  != null ? "date="  + URLEncoder.encode(date,  StandardCharsets.UTF_8) + "&" : "")
+                + (time  != null ? "start=" + URLEncoder.encode(time,  StandardCharsets.UTF_8) + "&" : "")
+                + (title != null ? "title=" + URLEncoder.encode(title, StandardCharsets.UTF_8) + "&" : "")
+                + (price != null ? "price=" + URLEncoder.encode(price, StandardCharsets.UTF_8) + "&" : "")
+                + (ctime != null ? "time="  + URLEncoder.encode(ctime, StandardCharsets.UTF_8) : "");
+
+            String target = ctx + "/jsp/input_member.jsp" + q;
+            if (target.endsWith("&")) target = target.substring(0, target.length() - 1);
+
+            resp.sendRedirect(resp.encodeRedirectURL(target));
+            return;
+        }
+
+        // 入力 → 確認（POSTで必須データを渡す）
+        if ("confirm_member".equals(action)) {
+            RequestDispatcher rd = req.getRequestDispatcher("/jsp/confirm_member.jsp");
+            rd.forward(req, resp);
+            return;
+        }
+
+        // 確定
+        if ("complete".equals(action)) {
+            try {
+                String name  = req.getParameter("name");
+                String date  = req.getParameter("date");
+                String start = req.getParameter("start");
+
+                if (name == null || name.isBlank() || date == null || date.isBlank() || start == null || start.isBlank()) {
+                    req.setAttribute("errorMessage", "入力が不足しています。もう一度やり直してください。");
+                    req.getRequestDispatcher("/jsp/confirm_member.jsp").forward(req, resp);
+                    return;
+                }
+
+                LocalDate d = LocalDate.parse(date);
+                LocalTime t = LocalTime.parse(start.length()==5 ? start + ":00" : start);
+                LocalDateTime when = LocalDateTime.of(d, t);
+
+                if (!reservationDAO.isSlotAvailable(when)) {
+                    req.setAttribute("errorMessage", "選択した日時は満席になりました。別の枠をお選びください。");
+                    resp.sendRedirect(req.getContextPath()+"/reservation?action=timeslots_week&date="+date);
+                    return;
+                }
+
+                boolean ok = reservationDAO.addReservation(name, when);
+                if (!ok) {
+                    req.setAttribute("errorMessage", "同じ名前と日時での予約は既に存在します。");
+                    req.getRequestDispatcher("/jsp/confirm_member.jsp").forward(req, resp);
+                    return;
+                }
+
+                req.setAttribute("name", name);
+                req.setAttribute("when", when);
+                req.getRequestDispatcher("/jsp/complete.jsp").forward(req, resp);
+                return;
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                req.setAttribute("errorMessage", "予約確定でエラーが発生しました: " + e.getMessage());
+                req.getRequestDispatcher("/jsp/confirm_member.jsp").forward(req, resp);
+                return;
+            }
+        }
+
+        // デフォルト
         resp.sendRedirect("index.jsp");
+    }
+
+    private void buildWeekCalendar(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+        LocalDate startDate = LocalDate.now();
+        LocalDate endDate   = startDate.plusDays(13);
+
+        LocalTime startTime = LocalTime.of(9, 0);
+        LocalTime endTime   = LocalTime.of(21, 0);
+        LocalTime lateStart = LocalTime.of(20, 0);
+
+        List<LocalTime> times = new ArrayList<>();
+        for (LocalTime t = startTime; !t.isAfter(endTime); t = t.plusMinutes(30)) {
+            times.add(t);
+        }
+
+        Map<LocalDate, Map<LocalTime, Boolean>> availability = new LinkedHashMap<>();
+        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+            Map<LocalTime, Boolean> slots = new LinkedHashMap<>();
+            boolean isMonday = (date.getDayOfWeek() == DayOfWeek.MONDAY);
+            for (LocalTime time : times) {
+                if (isMonday) {
+                    slots.put(time, false);
+                } else {
+                    LocalDateTime slot = LocalDateTime.of(date, time);
+                    boolean isFree = reservationDAO.isSlotAvailable(slot);
+                    slots.put(time, isFree);
+                }
+            }
+            availability.put(date, slots);
+        }
+
+        List<LocalDate> dates = new ArrayList<>(availability.keySet());
+
+        Map<LocalDate, String> dowJa = new LinkedHashMap<>();
+        for (LocalDate d : dates) {
+            String w = switch (d.getDayOfWeek()) {
+                case MONDAY    -> "(月)";
+                case TUESDAY   -> "(火)";
+                case WEDNESDAY -> "(水)";
+                case THURSDAY  -> "(木)";
+                case FRIDAY    -> "(金)";
+                case SATURDAY  -> "(土)";
+                case SUNDAY    -> "(日)";
+            };
+            dowJa.put(d, w);
+        }
+
+        DateTimeFormatter keyFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm");
+        Map<String, Boolean> availKeyed = new LinkedHashMap<>();
+        for (Map.Entry<LocalDate, Map<LocalTime, Boolean>> e : availability.entrySet()) {
+            LocalDate d = e.getKey();
+            for (Map.Entry<LocalTime, Boolean> s : e.getValue().entrySet()) {
+                String key = d.atTime(s.getKey()).format(keyFmt);
+                availKeyed.put(key, s.getValue());
+            }
+        }
+
+        Map<LocalDate, Boolean> isSunday = new LinkedHashMap<>();
+        Map<LocalDate, Boolean> isSaturday = new LinkedHashMap<>();
+        for (LocalDate d : dates) {
+            isSunday.put(d, d.getDayOfWeek() == DayOfWeek.SUNDAY);
+            isSaturday.put(d, d.getDayOfWeek() == DayOfWeek.SATURDAY);
+        }
+
+        Map<LocalDate, Boolean> isToday = new LinkedHashMap<>();
+        LocalDate today = LocalDate.now();
+        for (LocalDate d : dates) {
+            isToday.put(d, d.equals(today));
+        }
+
+        Map<String, Boolean> isPastKeyed = new LinkedHashMap<>();
+        LocalDateTime now = LocalDateTime.now();
+        for (LocalDate d : dates) {
+            for (LocalTime t : times) {
+                String key = d.atTime(t).format(keyFmt);
+                isPastKeyed.put(key, d.atTime(t).isBefore(now));
+            }
+        }
+
+        Map<String, Boolean> isLateKeyed = new LinkedHashMap<>();
+        for (LocalDate d : dates) {
+            for (LocalTime t : times) {
+                String key = d.atTime(t).format(keyFmt);
+                isLateKeyed.put(key, !t.isBefore(lateStart)); // 20:00以降
+            }
+        }
+
+        String monthTitle;
+        if (startDate.getYear() == endDate.getYear() && startDate.getMonth() == endDate.getMonth()) {
+            monthTitle = String.format("%d年%d月", startDate.getYear(), startDate.getMonthValue());
+        } else if (startDate.getYear() == endDate.getYear()) {
+            monthTitle = String.format("%d年%d月〜%d月",
+                    startDate.getYear(), startDate.getMonthValue(), endDate.getMonthValue());
+        } else {
+            monthTitle = String.format("%d年%d月〜%d年%d月",
+                    startDate.getYear(), startDate.getMonthValue(),
+                    endDate.getYear(), endDate.getMonthValue());
+        }
+
+        req.setAttribute("times", times);
+        req.setAttribute("dates", dates);
+        req.setAttribute("dowJa", dowJa);
+        req.setAttribute("availKeyed", availKeyed);
+        req.setAttribute("isSunday", isSunday);
+        req.setAttribute("isSaturday", isSaturday);
+        req.setAttribute("isToday", isToday);
+        req.setAttribute("isPastKeyed", isPastKeyed);
+        req.setAttribute("isLateKeyed", isLateKeyed);
+        req.setAttribute("monthTitle", monthTitle);
+
+        RequestDispatcher rd = req.getRequestDispatcher("/jsp/week_calendar.jsp");
+        rd.forward(req, resp);
     }
 
     private void exportCsv(HttpServletRequest req, HttpServletResponse resp) throws IOException {

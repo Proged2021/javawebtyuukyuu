@@ -9,9 +9,8 @@
   <title>空席カレンダー</title>
   <style>
     :root{
-      --rose-50:#fdf2f8; --rose-100:#fde2e7; --rose-500:#f43f5e;
-      --neutral-50:#fafafa; --neutral-100:#f5f5f5; --neutral-200:#e5e7eb;
-      --neutral-600:#475569;
+      --rose-50:#fdf2f8; --rose-100:#fde2e7;
+      --neutral-100:#f5f5f5; --neutral-200:#e5e7eb;
     }
     html,body{margin:0;background:#fafafa;color:#111;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;}
     .wrap{max-width:1200px;margin:0 auto;padding:16px;}
@@ -35,9 +34,7 @@
     .cell{height:44px;text-align:center;padding:4px}
     .btn{display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:10px;padding:8px 10px;cursor:pointer;font-size:13px;font-weight:700;min-width:48px}
     .btn-ok{background:#10b981;color:#fff}
-    .btn-ok:hover{filter:brightness(0.96)}
     .btn-ng{background:#e5e7eb;color:#94a3b8;cursor:not-allowed}
-    .legend{margin-top:8px;font-size:12px;color:#64748b;display:flex;gap:12px}
     .badge{display:inline-block;border-radius:8px;padding:2px 8px;background:var(--rose-50);color:#9f1239;font-weight:700;font-size:12px;border:1px solid var(--rose-100)}
     .bar{display:flex;justify-content:space-between;align-items:center;margin:10px 0 14px}
     .note{font-size:12px;color:#64748b}
@@ -60,18 +57,12 @@
     <div class="note">※ 月曜は終日× / 30分刻み</div>
   </div>
 
-  <!-- カレンダー -->
   <div class="calendar">
     <table class="grid">
       <thead>
       <tr>
-        <th class="time-col today">
-          <div style="padding:8px 6px">時間</div>
-        </th>
-
-        <!-- 日付ヘッダ -->
+        <th class="time-col today"><div style="padding:8px 6px">時間</div></th>
         <c:forEach var="d" items="${dates}">
-          <!-- LocalDate.toString() は yyyy-MM-dd -->
           <c:set var="dateStr" value="${d}"/>
           <c:set var="isSun" value="${isSunday[d]}"/>
           <c:set var="isSat" value="${isSaturday[d]}"/>
@@ -87,22 +78,14 @@
       </thead>
 
       <tbody>
-      <!-- 各時間行 -->
       <c:forEach var="t" items="${times}">
-        <!-- LocalTime.toString() は HH:mm:ss なので先頭5文字だけ使う -->
         <c:set var="timeStr" value="${fn:substring(t,0,5)}"/>
         <tr class="time-row">
-          <!-- 左端 時刻 -->
-          <td class="time-col">
-            <div class="t" style="padding:8px 6px;">${timeStr}</div>
-          </td>
+          <td class="time-col"><div class="t" style="padding:8px 6px;">${timeStr}</div></td>
 
-          <!-- 各日セル -->
           <c:forEach var="d" items="${dates}">
             <c:set var="dateStr" value="${d}"/>
-            <!-- 予約可否判定キー yyyy-MM-dd'T'HH:mm -->
             <c:set var="key" value="${dateStr}T${timeStr}"/>
-
             <c:set var="free" value="${availKeyed[key]}"/>
             <c:set var="past" value="${isPastKeyed[key]}"/>
             <c:set var="late" value="${isLateKeyed[key]}"/>
@@ -110,37 +93,27 @@
             <td class="cell ${late ? 'late' : ''}">
               <c:choose>
                 <c:when test="${free and not past}">
-                  <!-- ◯：フォームPOST（方法B） ※ボタン表示は「◎」 -->
                   <form method="post" action="${pageContext.request.contextPath}/reservation" style="display:inline-block">
                     <input type="hidden" name="action" value="select_timeslot"/>
                     <input type="hidden" name="date"   value="${dateStr}"/>
                     <input type="hidden" name="time"   value="${timeStr}"/>
-                    <!-- クーポン情報を引き継ぎ（あれば） -->
                     <input type="hidden" name="title"  value="${param.title}"/>
                     <input type="hidden" name="price"  value="${param.price}"/>
                     <input type="hidden" name="c_time" value="${param.time}"/>
-
                     <button type="submit" class="btn btn-ok" aria-label="この枠を予約する">◎</button>
                   </form>
                 </c:when>
                 <c:otherwise>
-                  <!-- ×：クリック不可 -->
                   <button type="button" class="btn btn-ng" disabled>×</button>
                 </c:otherwise>
               </c:choose>
             </td>
           </c:forEach>
+
         </tr>
       </c:forEach>
       </tbody>
     </table>
-  </div>
-
-  <div class="legend">
-    <span>◎ 予約可</span>
-    <span>× 予約不可 / 過去</span>
-    <span>うすい列 = 本日</span>
-    <span>グレー背景 = 閉店前帯</span>
   </div>
 
   <div style="margin-top:14px">

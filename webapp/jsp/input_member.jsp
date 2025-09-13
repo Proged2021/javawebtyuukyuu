@@ -5,7 +5,6 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>お客様情報入力 - 予約</title>
-  <!-- Tailwind CDN（簡易導入。本番は自己ホスト推奨） -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     .section-card { border: 1px solid #f6dbe1; border-radius: 16px; background: #fff }
@@ -20,7 +19,6 @@
   </style>
 </head>
 <body class="bg-neutral-50">
-  <!-- ヘッダー -->
   <header class="border-b bg-white">
     <div class="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
       <div class="text-lg font-extrabold text-pink-600">B*beauty</div>
@@ -29,9 +27,7 @@
   </header>
 
   <main class="mx-auto max-w-6xl px-4 py-6 grid grid-cols-1 md:grid-cols-12 gap-6">
-    <!-- 左：入力フォーム -->
     <section class="md:col-span-8 space-y-6">
-      <!-- 来店者情報 -->
       <div class="section-card">
         <div class="section-head">ご来店者さま情報</div>
         <div class="p-5 space-y-4">
@@ -123,7 +119,6 @@
         </div>
       </div>
 
-      <!-- 規約 -->
       <div class="section-card">
         <div class="section-head">利用規約・個人情報の取り扱い</div>
         <div class="p-5 space-y-3">
@@ -138,14 +133,12 @@
         </div>
       </div>
 
-      <!-- 送信 -->
       <div class="flex items-center justify-end gap-3">
         <button type="button" class="rounded px-4 py-2 border hover:bg-neutral-50" onclick="history.back()">戻る</button>
         <button id="submitBtn" class="btn-primary rounded px-5 py-2.5">確認画面へ</button>
       </div>
     </section>
 
-    <!-- 右：選択内容の確認 -->
     <aside class="md:col-span-4">
       <div class="section-card sticky top-4">
         <div class="section-head">予約内容の確認</div>
@@ -172,25 +165,22 @@
   </main>
 
   <script>
-    // --- ユーティリティ ---
     const jpYen = (n) => new Intl.NumberFormat('ja-JP', { style:'currency', currency:'JPY' }).format(n);
+    const parseMaybeJson = (s) => { try { return s ? JSON.parse(s) : null; } catch(e) { return null; } };
 
-    // --- クーポン/日時の引き継ぎ表示 ---
+    // 右側の表示をURL/SSから再現
     (function hydrate(){
       try {
         const params = new URLSearchParams(location.search);
         const s = sessionStorage.getItem('selectedCoupon');
         const coupon = s ? JSON.parse(s) : null;
-
         const title = params.get('title') || (coupon && coupon.title) || '';
         const price = Number(params.get('price') || (coupon && coupon.price) || 0);
         const time  = Number(params.get('time')  || (coupon && coupon.time)  || 0);
-
         document.getElementById('couponTitle').textContent = title || '—';
         document.getElementById('couponPrice').textContent = price ? jpYen(price) : '—';
         document.getElementById('couponTime').textContent  = time ? `所要 ${time}分` : '—';
 
-        // サーブレットのリダイレクトで渡ってくる date/start も反映
         const date = params.get('date') || '';
         const start= params.get('start') || '';
         if (date && start) {
@@ -205,9 +195,8 @@
       } catch (e) { console.warn(e); }
     })();
 
-    // --- バリデーション＆送信（確認画面へ） ---
+    // 確認画面へ（POSTで送る）
     document.getElementById('submitBtn').addEventListener('click', function(){
-      // エラー消し
       ['err_lastName','err_firstName','err_tel','err_email','err_agree'].forEach(id => {
         const el = document.getElementById(id); if (el) el.style.display = 'none';
       });
@@ -224,10 +213,8 @@
       if (!/^\d{10,11}$/.test(tel)){ document.getElementById('err_tel').style.display='block'; ok=false; }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ document.getElementById('err_email').style.display='block'; ok=false; }
       if (!agree){ document.getElementById('err_agree').style.display='block'; ok=false; }
-
       if (!ok) return;
 
-      // 送信データ保持（次画面やサーバで利用）
       const payload = {
         lastName, firstName,
         lastKana:  document.getElementById('lastKana').value.trim(),
@@ -241,20 +228,27 @@
       };
       sessionStorage.setItem('memberInfo', JSON.stringify(payload));
 
-      // 遷移先を組み立て
-      const ctx = "/" + location.pathname.split("/")[1]; // 例: /javawebtyuukyuu
-      const params = new URLSearchParams(location.search);
-      const selectedCoupon  = sessionStorage.getItem('selectedCoupon');
-      const selectedTimeslot= sessionStorage.getItem('selectedTimeslot');
+      const selectedCoupon   = sessionStorage.getItem('selectedCoupon');
+      const selectedTimeslot = sessionStorage.getItem('selectedTimeslot');
+      const urlq = new URLSearchParams(location.search);
+      const date  = urlq.get('date')  || '';
+      const start = urlq.get('start') || '';
 
-      const q = new URLSearchParams({
-        action: 'confirm_member',
-        ...(selectedCoupon ? { coupon: selectedCoupon } : {}),
-        ...(selectedTimeslot ? { timeslot: selectedTimeslot } : {}),
-        member: JSON.stringify(payload)
-      });
+      const ctx = "/" + location.pathname.split("/")[1];
+      const form = document.createElement('form');
+      form.method = 'post';
+      form.action = location.origin + ctx + '/reservation';
+      const add = (k,v) => { const i=document.createElement('input'); i.type='hidden'; i.name=k; i.value=v; form.appendChild(i); };
 
-      location.href = `${location.origin}${ctx}/reservation?${q.toString()}`;
+      add('action','confirm_member');
+      add('member', JSON.stringify(payload));
+      if (selectedCoupon)   add('coupon',   selectedCoupon);
+      if (selectedTimeslot) add('timeslot', selectedTimeslot);
+      if (date)  add('date',  date);
+      if (start) add('start', start);
+
+      document.body.appendChild(form);
+      form.submit();
     });
   </script>
 </body>
