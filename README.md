@@ -1,1 +1,1 @@
-http://localhost:8080/javawebtyuukyuu
+http://localhost:8080/javawebtyuukyuu/shop-top/
