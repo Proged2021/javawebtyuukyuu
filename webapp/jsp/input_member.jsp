@@ -167,30 +167,50 @@
   <script>
     const jpYen = (n) => new Intl.NumberFormat('ja-JP', { style:'currency', currency:'JPY' }).format(n);
     const parseMaybeJson = (s) => { try { return s ? JSON.parse(s) : null; } catch(e) { return null; } };
+    const onlyDigits = (s) => (s||'').toString().replace(/\D+/g,'');
 
-    // 右側の表示をURL/SSから再現
+    // 右側の表示をURL/SSから再現 ＋ URLの値を sessionStorage にも補完保存（未保存時のみ）
     (function hydrate(){
       try {
         const params = new URLSearchParams(location.search);
-        const s = sessionStorage.getItem('selectedCoupon');
-        const coupon = s ? JSON.parse(s) : null;
-        const title = params.get('title') || (coupon && coupon.title) || '';
-        const price = Number(params.get('price') || (coupon && coupon.price) || 0);
-        const time  = Number(params.get('time')  || (coupon && coupon.time)  || 0);
-        document.getElementById('couponTitle').textContent = title || '—';
-        document.getElementById('couponPrice').textContent = price ? jpYen(price) : '—';
-        document.getElementById('couponTime').textContent  = time ? `所要 ${time}分` : '—';
 
-        const date = params.get('date') || '';
-        const start= params.get('start') || '';
-        if (date && start) {
-          document.getElementById('visitDateTime').textContent = `${date} ${start}`;
-        } else {
-          const ts = sessionStorage.getItem('selectedTimeslot');
-          if (ts) {
-            const { date: d, time: t } = JSON.parse(ts);
-            document.getElementById('visitDateTime').textContent = d && t ? `${d} ${t}` : '—';
+        // --- クーポン ---
+        let coupon = parseMaybeJson(sessionStorage.getItem('selectedCoupon'));
+        const urlCoupon = {
+          id:    onlyDigits(params.get('couponId')),
+          title: params.get('title') || '',
+          price: Number((params.get('price')||'').toString().replace(/[^\d.-]/g,'')) || 0,
+          time:  Number(params.get('time') || 0)
+        };
+        // sessionStorage 未設定なら URL から補完保存
+        if (!coupon || typeof coupon !== 'object') {
+          if (urlCoupon.title || urlCoupon.price || urlCoupon.time || urlCoupon.id) {
+            coupon = urlCoupon;
+            sessionStorage.setItem('selectedCoupon', JSON.stringify(coupon));
           }
+        }
+
+        document.getElementById('couponTitle').textContent = (coupon && coupon.title) ? coupon.title : '—';
+        document.getElementById('couponPrice').textContent = (coupon && coupon.price) ? jpYen(coupon.price) : '—';
+        document.getElementById('couponTime').textContent  = (coupon && coupon.time)  ? `所要 ${coupon.time}分` : '—';
+
+        // --- 来店日時 ---
+        let ts = parseMaybeJson(sessionStorage.getItem('selectedTimeslot'));
+        const urlTs = {
+          date: params.get('date')  || '',
+          time: params.get('start') || ''
+        };
+        if (!ts || typeof ts !== 'object') {
+          if (urlTs.date || urlTs.time) {
+            ts = urlTs;
+            sessionStorage.setItem('selectedTimeslot', JSON.stringify(ts));
+          }
+        }
+
+        if (ts && ts.date && ts.time) {
+          document.getElementById('visitDateTime').textContent = `${ts.date} ${ts.time}`;
+        } else {
+          document.getElementById('visitDateTime').textContent = '—';
         }
       } catch (e) { console.warn(e); }
     })();
@@ -231,8 +251,8 @@
       const selectedCoupon   = sessionStorage.getItem('selectedCoupon');
       const selectedTimeslot = sessionStorage.getItem('selectedTimeslot');
       const urlq = new URLSearchParams(location.search);
-      const date  = urlq.get('date')  || '';
-      const start = urlq.get('start') || '';
+      const date  = urlq.get('date')  || (selectedTimeslot ? (JSON.parse(selectedTimeslot).date||'')  : '');
+      const start = urlq.get('start') || (selectedTimeslot ? (JSON.parse(selectedTimeslot).time||'') : '');
 
       const ctx = "/" + location.pathname.split("/")[1];
       const form = document.createElement('form');

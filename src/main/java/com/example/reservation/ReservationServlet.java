@@ -31,6 +31,26 @@ import jakarta.servlet.http.Part;
 public class ReservationServlet extends HttpServlet {
     private final ReservationDAO reservationDAO = new ReservationDAO();
 
+    /** "c3" のような文字列でも数字だけを取り出して Integer にする（取れなければ null） */
+    private static Integer readCouponIdParam(HttpServletRequest req) {
+        String raw = req.getParameter("couponId");
+        if (raw == null) return null;
+        String onlyNum = raw.replaceAll("\\D+", "");
+        if (onlyNum.isEmpty()) return null;
+        try { return Integer.valueOf(onlyNum); } catch (NumberFormatException e) { return null; }
+    }
+
+    /** 価格の文字列を数値に（"12,320円" のような表記もOK） */
+    private static Integer parsePriceToInt(String raw) {
+        if (raw == null) return 0;
+        try {
+            String digits = raw.replaceAll("[^0-9-]", "");
+            return digits.isEmpty() ? 0 : Integer.parseInt(digits);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
@@ -55,7 +75,6 @@ public class ReservationServlet extends HttpServlet {
             int start = (page - 1) * recordsPerPage;
             int end = Math.min(start + recordsPerPage, allReservations.size());
             List<Reservation> reservations = allReservations.subList(start, end);
-
             int noOfPages = (int) Math.ceil(allReservations.size() * 1.0 / recordsPerPage);
 
             req.setAttribute("reservations", reservations);
@@ -97,6 +116,24 @@ public class ReservationServlet extends HttpServlet {
 
         // 2週間カレンダー
         if ("timeslots_week".equals(action)) {
+            // ---- URL 正規化（汚れたクエリ除去）----
+            String date = req.getParameter("date");
+
+            // action と date 以外のパラメータが1つでもあれば「汚れている」
+            Map<String, String[]> params = req.getParameterMap();
+            boolean hasDirty = params.keySet().stream()
+                    .anyMatch(k -> !k.equals("action") && !k.equals("date"));
+
+            if (hasDirty) {
+                String target = req.getContextPath() + "/reservation?action=timeslots_week";
+                if (date != null && !date.isBlank()) {
+                    target += "&date=" + URLEncoder.encode(date, StandardCharsets.UTF_8);
+                }
+                resp.sendRedirect(resp.encodeRedirectURL(target));
+                return;
+            }
+            // ------------------------------------
+
             buildWeekCalendar(req, resp);
             return;
         }
@@ -115,6 +152,7 @@ public class ReservationServlet extends HttpServlet {
         if ("add".equals(action)) {
             String name = req.getParameter("name");
             String reservationTimeString = req.getParameter("reservation_time");
+            Integer couponId = readCouponIdParam(req);
 
             if (name == null || name.trim().isEmpty()) {
                 req.setAttribute("errorMessage", "名前は必須です。");
@@ -133,7 +171,8 @@ public class ReservationServlet extends HttpServlet {
                     req.getRequestDispatcher("/index.jsp").forward(req, resp);
                     return;
                 }
-                if (!reservationDAO.addReservation(name, reservationTime)) {
+                // クーポン情報は追加画面では任意なので null/0 を入れて保存
+                if (!reservationDAO.addReservation(name, reservationTime, couponId, null, 0)) {
                     req.setAttribute("errorMessage", "同じ名前と日時での予約は既に存在します。");
                     req.getRequestDispatcher("/index.jsp").forward(req, resp);
                     return;
@@ -151,6 +190,7 @@ public class ReservationServlet extends HttpServlet {
                 int id = Integer.parseInt(req.getParameter("id"));
                 String name = req.getParameter("name");
                 String reservationTimeString = req.getParameter("reservation_time");
+                Integer couponId = readCouponIdParam(req);
 
                 if (name == null || name.trim().isEmpty()) {
                     req.setAttribute("errorMessage", "名前は必須です。");
@@ -169,7 +209,7 @@ public class ReservationServlet extends HttpServlet {
                     req.getRequestDispatcher("/jsp/edit.jsp").forward(req, resp);
                     return;
                 }
-                if (!reservationDAO.updateReservation(id, name, reservationTime)) {
+                if (!reservationDAO.updateReservation(id, name, reservationTime, couponId, null, 0)) {
                     req.setAttribute("errorMessage", "同じ名前と日時での予約は既に存在します。");
                     req.getRequestDispatcher("/jsp/edit.jsp").forward(req, resp);
                     return;
@@ -226,7 +266,6 @@ public class ReservationServlet extends HttpServlet {
                 + (title != null ? "title=" + URLEncoder.encode(title, StandardCharsets.UTF_8) + "&" : "")
                 + (price != null ? "price=" + URLEncoder.encode(price, StandardCharsets.UTF_8) + "&" : "")
                 + (ctime != null ? "time="  + URLEncoder.encode(ctime, StandardCharsets.UTF_8) : "");
-
             String target = ctx + "/jsp/input_member.jsp" + q;
             if (target.endsWith("&")) target = target.substring(0, target.length() - 1);
 
@@ -241,12 +280,22 @@ public class ReservationServlet extends HttpServlet {
             return;
         }
 
-        // 確定
+        // 予約確定
         if ("complete".equals(action)) {
             try {
                 String name  = req.getParameter("name");
                 String date  = req.getParameter("date");
                 String start = req.getParameter("start");
+
+                String couponIdRaw = req.getParameter("couponId");
+                String couponTitle = req.getParameter("title");
+                String priceStr    = req.getParameter("price");
+
+                Integer couponId = null;
+                if (couponIdRaw != null && !couponIdRaw.isBlank()) {
+                    couponId = Integer.valueOf(couponIdRaw.replaceAll("\\D+", ""));
+                }
+                int price = parsePriceToInt(priceStr);
 
                 if (name == null || name.isBlank() || date == null || date.isBlank() || start == null || start.isBlank()) {
                     req.setAttribute("errorMessage", "入力が不足しています。もう一度やり直してください。");
@@ -255,25 +304,40 @@ public class ReservationServlet extends HttpServlet {
                 }
 
                 LocalDate d = LocalDate.parse(date);
-                LocalTime t = LocalTime.parse(start.length()==5 ? start + ":00" : start);
+                LocalTime t = LocalTime.parse(start.length() == 5 ? start + ":00" : start);
                 LocalDateTime when = LocalDateTime.of(d, t);
 
                 if (!reservationDAO.isSlotAvailable(when)) {
                     req.setAttribute("errorMessage", "選択した日時は満席になりました。別の枠をお選びください。");
-                    resp.sendRedirect(req.getContextPath()+"/reservation?action=timeslots_week&date="+date);
+                    req.setAttribute("name", name);
+                    req.setAttribute("date", date);
+                    req.setAttribute("start", start);
+                    req.setAttribute("couponTitle", couponTitle);
+                    req.setAttribute("couponPrice", price);
+                    req.setAttribute("couponId", couponId);
+                    req.getRequestDispatcher("/jsp/confirm_member.jsp").forward(req, resp);
                     return;
                 }
 
-                boolean ok = reservationDAO.addReservation(name, when);
+                boolean ok = reservationDAO.addReservation(name, when, couponId, couponTitle, price);
                 if (!ok) {
                     req.setAttribute("errorMessage", "同じ名前と日時での予約は既に存在します。");
+                    req.setAttribute("name", name);
+                    req.setAttribute("date", date);
+                    req.setAttribute("start", start);
+                    req.setAttribute("couponTitle", couponTitle);
+                    req.setAttribute("couponPrice", price);
+                    req.setAttribute("couponId", couponId);
                     req.getRequestDispatcher("/jsp/confirm_member.jsp").forward(req, resp);
                     return;
                 }
 
                 req.setAttribute("name", name);
                 req.setAttribute("when", when);
-                req.getRequestDispatcher("/jsp/complete.jsp").forward(req, resp);
+                req.setAttribute("couponTitle", couponTitle);
+                req.setAttribute("couponPrice", price);
+                RequestDispatcher rd = req.getRequestDispatcher("/jsp/complete.jsp");
+                rd.forward(req, resp);
                 return;
 
             } catch (Exception e) {
@@ -287,6 +351,8 @@ public class ReservationServlet extends HttpServlet {
         // デフォルト
         resp.sendRedirect("index.jsp");
     }
+
+    /* ========= week calendar & CSV ========= */
 
     private void buildWeekCalendar(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
@@ -406,13 +472,18 @@ public class ReservationServlet extends HttpServlet {
         resp.setHeader("Content-Disposition", "attachment; filename=\"reservations.csv\"");
 
         try (PrintWriter writer = resp.getWriter()) {
-            writer.println("ID,Name,ReservationTime");
+            writer.println("ID,Name,ReservationTime,CouponId,CouponTitle,CouponPrice");
             List<Reservation> reservations = reservationDAO.getAllReservations();
+            DateTimeFormatter fmt = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
             for (Reservation res : reservations) {
-                writer.printf("%d,%s,%s%n",
+                String cid = res.getCouponId() == null ? "" : String.valueOf(res.getCouponId());
+                String cti = res.getCouponTitle() == null ? "" : res.getCouponTitle().replace(",", "、");
+                String cpr = res.getCouponPrice() == null ? "" : String.valueOf(res.getCouponPrice());
+                writer.printf("%d,%s,%s,%s,%s,%s%n",
                         res.getId(),
                         res.getName(),
-                        res.getReservationTime().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+                        res.getReservationTime().format(fmt),
+                        cid, cti, cpr);
             }
         }
     }

@@ -49,12 +49,15 @@
 
       <form id="completeForm" method="post" action="${pageContext.request.contextPath}/reservation">
         <input type="hidden" name="action" value="complete"/>
-        <input type="hidden" name="name"        id="hiddenName"/>
-        <input type="hidden" name="date"        id="hiddenDate"/>
-        <input type="hidden" name="start"       id="hiddenStart"/>
-        <input type="hidden" name="coupon"      id="hiddenCoupon"/>
-        <input type="hidden" name="member"      id="hiddenMember"/>
-        <input type="hidden" name="timeslot"    id="hiddenTimeslot"/>
+
+        <!-- ここに hidden を追記 -->
+        <input type="hidden" name="name"     id="hiddenName"/>
+        <input type="hidden" name="member"   id="hiddenMember"/>
+        <input type="hidden" name="couponId" id="hiddenCouponId"/>
+        <input type="hidden" name="coupon"   id="hiddenCoupon"/>
+        <input type="hidden" name="date"     id="hiddenDate"/>
+        <input type="hidden" name="start"    id="hiddenStart"/>
+
         <button class="btn primary" type="submit">この内容で予約する</button>
       </form>
     </div>
@@ -85,7 +88,7 @@
   </aside>
 </main>
 
-<!-- 受け取ったPOST値を安全に data-* に入れる -->
+<!-- seed: クーポン/日時など一時保存用 -->
 <div id="seed"
      data-member="${fn:escapeXml(param.member)}"
      data-coupon="${fn:escapeXml(param.coupon)}"
@@ -94,54 +97,54 @@
      data-start="${fn:escapeXml(param.start)}"
      style="display:none"></div>
 
+<!-- ===== ここから追加スクリプト ===== -->
 <script>
-  var yen = (n)=> new Intl.NumberFormat('ja-JP',{style:'currency',currency:'JPY'}).format(n);
-  var parseMaybeJson=(s)=>{try{return s?JSON.parse(s):null;}catch(e){return null;}};
-  var norm=(v)=> (v===false||v==='false'||v==null||v==='null'||v==='undefined')?'':String(v);
+(function(){
+  const J = (s)=>{ try{return s?JSON.parse(s):null;}catch(e){return null;} };
+  const N = (v)=> (v===false||v==='false'||v==null||v==='null'||v==='undefined') ? '' : String(v);
+  const qs = new URLSearchParams(location.search);
 
-  var SEED=(document.getElementById('seed')||{}).dataset||{};
-  var P_MEMBER=SEED.member||"",P_COUPON=SEED.coupon||"",P_TIMESLOT=SEED.timeslot||"",P_DATE=SEED.date||"",P_START=SEED.start||"";
-  var qs=new URLSearchParams(location.search);
+  // --- お客様情報 ---
+  const m = J(sessionStorage.getItem('memberInfo')) || {};
+  const fullName = (N(m.lastName)+' '+N(m.firstName)).trim();
+  const setText = (id, val) => { const el=document.getElementById(id); if(el) el.textContent=val||'—'; };
+  setText('name', fullName || N(m.email));
+  setText('kana', (N(m.lastKana)+' '+N(m.firstKana)).trim());
+  setText('tel', N(m.tel));
+  setText('email', N(m.email));
+  setText('gender', ({male:'男性',female:'女性',other:'その他'})[N(m.gender)]||'');
+  setText('purpose', N(m.purpose));
+  setText('stylist', N(m.stylist));
+  setText('notes', N(m.notes));
 
-  // お客様情報
-  (function(){
-    var m = parseMaybeJson(P_MEMBER) || parseMaybeJson(qs.get('member')) || parseMaybeJson(sessionStorage.getItem('memberInfo')) || {};
-    var set=(id,v)=>{var el=document.getElementById(id); if(el) el.textContent=v||'—';};
-    var lastName=norm(m.lastName), firstName=norm(m.firstName), lastKana=norm(m.lastKana), firstKana=norm(m.firstKana);
-    set('name',(lastName+' '+firstName).trim());
-    set('kana',(lastKana+' '+firstKana).trim());
-    set('tel',norm(m.tel)); set('email',norm(m.email));
-    var gmap={female:'女性',male:'男性',other:'その他','':''}; set('gender', gmap[norm(m.gender)]||'—');
-    set('purpose',norm(m.purpose)); set('stylist',norm(m.stylist)); set('notes',norm(m.notes));
-    var hidden=document.getElementById('hiddenName'); if(hidden) hidden.value=((lastName+' '+firstName).trim())||norm(m.email);
-    var hM=document.getElementById('hiddenMember'); if(hM) hM.value=JSON.stringify(m);
-  })();
+  const hName=document.getElementById('hiddenName'); if(hName) hName.value=fullName||N(m.email)||'来店者';
+  const hMember=document.getElementById('hiddenMember'); if(hMember) hMember.value=JSON.stringify(m);
 
-  // クーポン
-  (function(){
-    var c = parseMaybeJson(P_COUPON) || parseMaybeJson(qs.get('coupon')) || parseMaybeJson(sessionStorage.getItem('selectedCoupon')) || {};
-    if(c && typeof c==='object'){
-      if(c.title) document.getElementById('couponTitle').textContent=norm(c.title);
-      if(c.time)  document.getElementById('couponTime').textContent='所要 '+norm(c.time)+'分';
-      if(c.price) document.getElementById('couponPrice').textContent=yen(Number(c.price));
-      var hC=document.getElementById('hiddenCoupon'); if(hC) hC.value=JSON.stringify(c);
-    }
-  })();
+  // --- クーポン ---
+  const seed=document.getElementById('seed');
+  const rawCoupon=(seed&&seed.dataset?seed.dataset.coupon:null)||qs.get('coupon')||sessionStorage.getItem('selectedCoupon');
+  const c=J(rawCoupon)||{};
+  const idRaw=(c.id!=null)?String(c.id):'';
+  const idNum=idRaw.replace(/\D+/g,''); // "c2" → "2"
+  if(c.title) document.getElementById('couponTitle').textContent=N(c.title);
+  if(c.time)  document.getElementById('couponTime').textContent='所要 '+N(c.time)+'分';
+  if(c.price) document.getElementById('couponPrice').textContent=new Intl.NumberFormat('ja-JP',{style:'currency',currency:'JPY'}).format(c.price);
 
-  // 来店日時
-  (function(){
-    var t = parseMaybeJson(P_TIMESLOT) || parseMaybeJson(qs.get('timeslot')) || parseMaybeJson(sessionStorage.getItem('selectedTimeslot'));
-    var d='',s='';
-    if(t && t.date && t.time){ d=norm(t.date); s=norm(t.time); }
-    else{ d=norm(P_DATE)||norm(qs.get('date')); s=norm(P_START)||norm(qs.get('start')); }
-    document.getElementById('visitDateTime').textContent=(d&&s)?(d+' '+s):'—';
-    var hD=document.getElementById('hiddenDate');  if(hD) hD.value=d||'';
-    var hS=document.getElementById('hiddenStart'); if(hS) hS.value=s||'';
-    var hT=document.getElementById('hiddenTimeslot'); if(hT) hT.value=(t&&t.date&&t.time)?JSON.stringify(t):'';
-  })();
+  const hCid=document.getElementById('hiddenCouponId'); if(hCid) hCid.value=idNum;
+  const hC=document.getElementById('hiddenCoupon'); if(hC) hC.value=JSON.stringify(c);
 
-  // 念のため action を絶対URL化
-  document.getElementById('completeForm').action = location.origin + "<%= request.getContextPath() %>" + "/reservation";
+  // --- 日時 ---
+  const rawTimeslot=(seed&&seed.dataset?seed.dataset.timeslot:null)||qs.get('timeslot')||sessionStorage.getItem('selectedTimeslot');
+  const t=J(rawTimeslot)||{};
+  const d=N(t.date)||N(seed.dataset.date)||qs.get('date');
+  const s=N(t.time)||N(seed.dataset.start)||qs.get('start');
+  const visit=document.getElementById('visitDateTime'); if(visit) visit.textContent=(d&&s)?(d+' '+s):'—';
+
+  const hD=document.getElementById('hiddenDate'); if(hD) hD.value=d||'';
+  const hS=document.getElementById('hiddenStart'); if(hS) hS.value=s||'';
+})();
 </script>
+<!-- ===== 追加スクリプトここまで ===== -->
+
 </body>
 </html>
