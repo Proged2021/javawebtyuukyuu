@@ -34,8 +34,6 @@ tfoot td { border-top: 1px solid #eee; padding-top:10px; }
     <h1>予約一覧</h1>
     <span class="badge">管理</span>
     <div class="link-row">
-      <!-- クーポン管理（任意でリンク） -->
-      <a href="<c:url value='/coupon?action=list'/>" class="button secondary">クーポン管理</a>
     </div>
   </div>
 
@@ -83,7 +81,6 @@ tfoot td { border-top: 1px solid #eee; padding-top:10px; }
       <input type="submit" value="過去の予約をクリーンアップ" class="button secondary"
              onclick="return confirm('本当に過去の予約を削除しますか？');">
     </form>
-    <a href="<c:url value='/index.jsp'/>" class="button secondary">トップに戻る</a>
   </div>
 
   <!-- 一覧テーブル -->

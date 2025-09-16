@@ -17,8 +17,6 @@
     </p>
     <div class="mt-6 flex justify-center gap-3">
       <a class="rounded-xl border px-4 py-2 hover:bg-neutral-100" href="${pageContext.request.contextPath}/shop-top/">お店ページへ</a>
-      <a class="rounded-xl bg-pink-600 text-white px-4 py-2 hover:bg-pink-700"
-         href="${pageContext.request.contextPath}/reservation?action=list">予約一覧へ</a>
     </div>
   </div>
 </body>
